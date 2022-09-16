@@ -19,7 +19,7 @@ test = var_chow(Y, X, Rob, p, breakd, rep, plotname)
 
 print test
 
-/* Actitave if needed
+/* Activate if needed
 # Example 2
 #------------
 list Y = IUS PUS e2
@@ -27,13 +27,14 @@ list X = null
 scalar Rob = 1
 scalar p = 1
 scalar rep = 100
-string breakd = "every"
-sprintf plotname "display"
+breakd = "every"
+plotname = "display"
+
 # specify vecm
 scalar rnk = 1
 vecm 2 rnk Y
 series EC = $ec
 list Y2 = diff(Y)
 list X2 = EC(-1)
-test2 = var_chow(Y2,X2,Rob,p,breakd,rep,plotname)
+test2 = var_chow(Y2, X2, Rob, p, breakd, rep, plotname)
 */
