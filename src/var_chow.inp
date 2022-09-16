@@ -1,5 +1,3 @@
-# private functions
-
 function matrix chowteststat (int T1 "Sample size before break",
                               int T2 "Sample size after break",
                               int T,
@@ -46,8 +44,6 @@ function matrix chowteststat (int T1 "Sample size before break",
     colnames(chowout, "tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2")
     return chowout
 end function
-
-# public functions
 
 function matrix var_chow (list Y "List of endogenous",
                           list X "List of exogenous",

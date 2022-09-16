@@ -48,8 +48,6 @@ chowteststat()
 
 
 Changelog:
-1.00 (Aug. 2022)
-  - internal refactoring and updating of syntax
 0.82 (Oct. 2017)
   - Correct the 'boolean ==' issue
   - Some cleanup of the code and help file
