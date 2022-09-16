@@ -1,6 +1,6 @@
 clear
 set verbose off
-#include var_chow.gfn
+include var_chow.gfn
 
 # Example 1
 #------------
