@@ -16,40 +16,44 @@ https://github.com/atecon/var_chow
 
 Public function:
 ----------------
-INPUT:
-  Y:  list, list of endogenous variables
-  X:  list, list of exogenous variables (e.g. trend or dummies).
-  Rob:  int, Select robust standard errors: "1" non-robust S.E., "2" HC
-    S.E., "3" to HAC S.E.
-    p:  int, Select max. lag length of the VAR(p) model.
+
+Function:       var_chow(list Y, list X, int Rob, int p, string breakd,
+                         int rep, string plotname)
+
+Description:    Main function for computing Chow test
+
+Arguments:
+  Y:      list, list of endogenous variables
+  X:      list, list of exogenous variables (e.g. trend or dummies).
+  Rob:    int, Select robust standard errors: "1" non-robust S.E., "2" HC
+          S.E., "3" to HAC S.E.
+  p:      int, Select max. lag length of the VAR(p) model.
   breakd: string, Select (i) a specific break date to test (e.g. "1983:1")
-    or (ii) check every possible data point.
-    rep:  int, Set the number of bootstrap iterations.
-    plotname: string, 'display' returns immediate plot on screen; or define a
-      path+file name where to save the output (e.g. plotname
-    '@dotdir\chow' will compile a pdf-file named 'chow_bp.pdf' in the
-      respective folder.
+          or (ii) check every possible data point.
+  rep:    int, Set the number of bootstrap iterations.
+  plotname: string, 'display' returns immediate plot on screen; or define a
+            path + filename where to save the output (e.g. plotname
+            '<DIR>\chow.pdf' will compile a pdf-file named 'chow_bp.pdf' in the
+            respective folder.
 
-   OUTPUT:
-   -------
-   Returns a vector (1x7) with the following test outputs in the following order:
-   chowout: "tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2"
-   1. Test statistics sample-split test
-   2. DF of sample-split test
-   3. Test statistics break-point test
-   4. DF of break-point test
-   5. Test statistics of forecast test
-   6. DF1 of forecast test
-   7. DF2 of forecast test
+Return:
+ Returns a vector (1x7) with the following test outputs in the following order:
+ chowout: "tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2"
+ 1. Test statistics sample-split test
+ 2. DF of sample-split test
+ 3. Test statistics break-point test
+ 4. DF of break-point test
+ 5. Test statistics of forecast test
+ 6. DF1 of forecast test
+ 7. DF2 of forecast test
 
-Private function:
------------------
-chowteststat()
 
 
 Changelog:
+1.00 (Sept. 2022)
+  - Get rid of deprecated hansl syntax
+  - Internal clean-up
+  - Update help text
 0.82 (Oct. 2017)
   - Correct the 'boolean ==' issue
   - Some cleanup of the code and help file
-
-

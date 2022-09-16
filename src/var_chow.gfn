@@ -1,0 +1,648 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="var_chow" needs-time-series-data="true" minver="2022a">
+<author email="atecon@posteo.de">Artur Tarassow</author>
+<version>1.00</version>
+<date>2022-09-16</date>
+<description>Chow-test on parameter constancy for VAR models</description>
+<tags>C32 C52</tags>
+<help>
+This package computes the Chow-test on parameter constancy for a reduced-form VAR model for A) a specific break date or B) every datapoint as done in JMULTI. It is assumed that every break point is known.
+
+NOTE: Option B does not refer to the Andrews-Ploberger approach. Here, as in
+JMULTI, every date is tested for a break.
+
+Three tests are applied (for further references see Lütkepohl et al (2007), pp. 135):
+1. Break-point test
+2. Sample-split test
+3. Forecast-test
+
+Please ask questions and report bugs on the gretl mailing list if possible. Alternatively, create an issue ticket on the github repo (see below).
+Source code and test script(s) can be found here:
+https://github.com/atecon/var_chow
+
+
+
+Public function:
+----------------
+
+Function:       var_chow(list Y, list X, int Rob, int p, string breakd,
+                         int rep, string plotname)
+
+Description:    Main function for computing Chow test
+
+Arguments:
+  Y:      list, list of endogenous variables
+  X:      list, list of exogenous variables (e.g. trend or dummies).
+  Rob:    int, Select robust standard errors: &quot;1&quot; non-robust S.E., &quot;2&quot; HC
+          S.E., &quot;3&quot; to HAC S.E.
+  p:      int, Select max. lag length of the VAR(p) model.
+  breakd: string, Select (i) a specific break date to test (e.g. &quot;1983:1&quot;)
+          or (ii) check every possible data point.
+  rep:    int, Set the number of bootstrap iterations.
+  plotname: string, 'display' returns immediate plot on screen; or define a
+            path + filename where to save the output (e.g. plotname
+            '&lt;DIR&gt;\chow.pdf' will compile a pdf-file named 'chow_bp.pdf' in the
+            respective folder.
+
+Return:
+ Returns a vector (1x7) with the following test outputs in the following order:
+ chowout: &quot;tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2&quot;
+ 1. Test statistics sample-split test
+ 2. DF of sample-split test
+ 3. Test statistics break-point test
+ 4. DF of break-point test
+ 5. Test statistics of forecast test
+ 6. DF1 of forecast test
+ 7. DF2 of forecast test
+
+
+
+Changelog:
+1.00 (Sept. 2022)
+  - Get rid of deprecated hansl syntax
+  - Internal clean-up
+  - Update help text
+0.82 (Oct. 2017)
+  - Correct the 'boolean ==' issue
+  - Some cleanup of the code and help file
+</help>
+<gretl-function name="var_chow" type="matrix">
+ <params count="7">
+  <param name="Y" type="list">
+<description>List of endogenous</description>
+  </param>
+  <param name="X" type="list">
+<description>List of exogenous</description>
+  </param>
+  <param name="Rob" type="int" min="1" max="3" default="1">
+<description>Robust S.E.</description>
+<labels count="3">
+"NO" "HC" "HAC" </labels>
+  </param>
+  <param name="p" type="int" min="1" default="4">
+<description>Lag length</description>
+  </param>
+  <param name="breakd" type="string">
+<description>search over 'single' (e.g. '1983:1') or 'every' datapoint(s)</description>
+  </param>
+  <param name="rep" type="int" min="99" default="399">
+<description>bootstrap repl.</description>
+  </param>
+  <param name="plotname" type="string">
+<description>'display' or 'C:\irf.eps'</description>
+  </param>
+ </params>
+<code>/* Public main function */
+matrix xfull = { X }
+if Rob==1
+  string Ro = &quot;&quot;
+elif Rob==2
+  string Ro = &quot;--robust&quot;
+elif Rob==3
+  string Ro = &quot;--robust-hac&quot;
+endif
+first = sprintf(&quot;%s&quot;, obslabel($t1))
+last = sprintf(&quot;%s&quot;, obslabel($t2))
+smpl @first @last
+scalar Tfull = $nobs
+printf &quot;Full sample:   %s to %s\n&quot;, first, last
+printf &quot;Selected sample size: %d\n&quot;, Tfull
+matrix y = { Y }
+matrix x = { X }
+scalar Teffective = rows(y) - p
+scalar Tdiff = Tfull - Teffective
+printf &quot;Sample size corrected for lags and taking differences of variables: %d\n&quot;, Teffective
+printf &quot;Difference between selected sample size and effective sample size: %d\n&quot;, Tdiff
+/*
+if breakd==&quot;every&quot;
+  #scalar trim = 0.15					#Trimming factor
+  trimobs = round(Teffective*trim)	#number of period to cut-off at the beginning and end
+  printf &quot;Number of obs. cut-off (%d%% trimming): %d\n&quot;, trim*100, trimobs
+endif
+*/
+smpl +Tdiff ;
+matrix y = { Y }
+matrix x = { X }
+errorif(cols(x) != 0 &amp;&amp; rows(x) != rows(y), &quot;Number of rows in Y and X must be equal.&quot;)
+# Initial value for bootstrap procedure below
+smpl @first @first
+scalar scaltmp = Tdiff + p - 1
+smpl +Tdiff +scaltmp
+matrix y0 = { Y }	# save the p initial values of the endogenous
+# Full sample estimation
+smpl @first @last
+var p Y ; X @Ro
+matrix var_coeff = $coeff
+matrix var_comp = $compan
+matrix uhat = $uhat
+# 1st subsample estimation: sample end refers to 'breakpoint-1'
+# (pre-breakpoint)-period
+scalar trim = 0.15              # Trimming factor
+scalar essdiff = -1
+loop while essdiff &lt; 0.00 --quiet
+  # number of period to cut-off at the beginning and end
+  trimobs = round(Teffective * trim)
+  if breakd == &quot;every&quot;
+    smpl @first @last
+    # Calculate trimmed sample size (starting /ending)
+    start =  $t1 + Tdiff + trimobs
+    string start_sub1 = obslabel(start - 1)
+    ende = $t2 - trimobs - Tdiff
+    string end_sub1 = obslabel(ende - 1)
+  else
+    scalar start = obsnum(@breakd)
+    string start_sub1 = obslabel(start - 1)
+    scalar ende = obsnum(@breakd)
+    string end_sub1 = obslabel(ende - 1)
+  endif
+  # Check whether starting sample is smaller than number of parameters
+  smpl @first @start_sub1
+  smpl +Tdiff ;
+  scalar startsize = $nobs
+  scalar param =  nelem(Y)*(1+p) + nelem(X)
+  genr essdiff =  startsize - param
+  errorif(essdiff &lt; 0 &amp;&amp; breakd != &quot;every&quot;, &quot;Starting sample is smaller than number of parameters\n                  You need to select a later break point\n&quot;)
+  trim = trim + 0.01
+endloop
+trim += 0.01		# avoid computational error
+printf &quot;The chosen trimming factor is %.2f\n&quot;, trim
+# Matrices storing results for further calculations
+smpl @start_sub1 @end_sub1
+iterat1 = $nobs
+printf &quot;Number of datapoints to search for breaks: %d\n&quot;, iterat1
+matrix rows_uhat1 = zeros(1, iterat1)	#store rows of uhat1
+matrix cov_matr1_rec = zeros(nelem(Y)*iterat1, nelem(Y))
+matrix n1_rec = zeros(1,iterat1)
+matrix n2_rec = zeros(1,iterat1)
+# Recursive sample extension (1st subsample)
+scalar k = 1
+scalar kk = 1
+smpl @first @start_sub1
+loop i=obsnum(start_sub1)..obsnum(end_sub1) --quiet
+  matrix y = { Y }
+  matrix x = { X }
+  scalar t1 = rows(y) - p
+  scalar t2 = Teffective - t1
+  if t1 &lt; 1
+    n1 = round(Teffective * t1)
+    tau1 = t1
+  else
+    n1 = t1
+    tau1 = t1 / Teffective
+  endif
+  if t2 &lt; 1
+    n2 = round(Teffective * t2)
+    tau2 = t2
+  else
+    n2 = t2
+    tau2 = t2 / Teffective
+  endif
+  errorif(n1 &lt;= cols(y), &quot;Starting sample is smaller than number of parameters. You need to select a larger value for 't1'.&quot;)
+  threshold = Teffective - ( cols(y) + cols(x) )
+  errorif(n2 &gt;= threshold, &quot;Ending sample is smaller than number of parameters. You need to select a smaller value for 't2'.&quot;)
+  n1_rec[k] = n1
+  n2_rec[k] = n2
+  var p Y ; X @Ro --silent
+  matrix uhat1 = $uhat
+  rows_uhat1[k] = rows(uhat1)
+  cov_matr1_rec[kk:kk+nelem(Y)-1,] = uhat1' * uhat1
+  k++
+  kk += nelem(Y)
+  smpl ; +1
+endloop
+# 2nd subsample estimation: starts at breakpoint+lag+Td
+smpl @first @last
+if breakd==&quot;every&quot;
+  scalar start =  $t1 + Tdiff + trimobs
+  string start_sub2 = obslabel(start)
+  scalar ende = $t2 - Tdiff - trimobs
+  string end_sub2 = obslabel(ende)
+  printf &quot;Second (non-effective) recursive subsample ranges from %s--%s to %s--%s\n&quot;, start_sub2, last, end_sub2, last
+else
+  scalar start = obsnum(@breakd)
+  string start_sub2 = obslabel(start + p)
+  scalar ende = obsnum(@breakd)
+  string end_sub2 = obslabel(ende + p)
+endif
+# Matrices storing results for further calculations
+smpl @start_sub2 @end_sub2
+iterat2 = $nobs
+if iterat1 == iterat2
+  printf &quot;Number of datapoints to search for breaks: %d\n&quot;, iterat2
+else
+  printf &quot;Subsamples have different lengths -- check sample sizes\n&quot;
+  break
+endif
+matrix rows_uhat2 = zeros(1, iterat2)
+matrix cov_matr2_rec = zeros(nelem(Y)*(iterat2), nelem(Y))
+# Test whether ending sample is smaller than number of parameters
+smpl @start_sub2 @last
+smpl +Tdiff ;
+scalar startsize = $nobs
+scalar param =  nelem(Y) * (1+p) + nelem(X)
+errorif(startsize &lt;= param, &quot;Ending sample is smaller than number of parameters. Select an earlier break point or larger trimming factor&quot;)
+# Recursive sample extension (2nd subsample)
+scalar k = 1
+scalar kk = 1
+smpl @start_sub2 @last
+loop i=@start_sub2..@end_sub2 --quiet
+  matrix y = { Y }
+  matrix x = { X }
+  scalar t2 = rows(y)
+  if t1 &lt; 1
+    n1 = round(Teffective * t1)
+    tau1 = t1
+  else
+    n1 = t1
+    tau1 = t1 / Teffective
+  endif
+  if t2 &lt; 1
+    n2 = round(Teffective*t2)
+    tau2 = t2
+  else
+    n2 = t2
+    tau2 = t2/Teffective
+  endif
+  errorif(n1 &lt;= cols(y), &quot;Starting sample is smaller than number of parameters. You need to select a larger value for 't1'.&quot;)
+  threshold = Teffective-( cols(y)+cols(x) )
+  errorif(n2 &gt;= threshold, &quot;Ending sample is smaller than number of paramters. You need to select a smaller value for 't2'.&quot;)
+  var p Y ; X @Ro --silent
+  matrix uhat2 = $uhat
+  rows_uhat2[k] = rows(uhat2)
+  cov_matr2_rec[kk:kk+nelem(Y)-1,] = uhat2' * uhat2
+  k++
+  kk += nelem(Y)
+  smpl +1 ;
+endloop
+scalar iterat = rows(cov_matr1_rec) / nelem(Y)
+chowout = zeros(iterat, 7)
+clabels = defarray(&quot;tstat_ss&quot;, &quot;df_ss&quot;, &quot;tstat_bp&quot;, &quot;df_bp&quot;, &quot;tstat_fc&quot;, &quot;df_fc1&quot;, &quot;df_fc2&quot;)
+cnameset(chowout, clabels)
+scalar k = 1
+scalar kk = 1
+loop i =1..iterat --quiet
+  n1tmp = n1_rec[k]
+  n2tmp = n2_rec[k]
+  matrix u_h_1 = uhat[1:n1tmp,]
+  scalar st = rows(uhat) - n2tmp + 1
+  matrix u_h_2 = uhat[st:rows(uhat),]
+  matrix cov_matr_rec = ( (u_h_1'*u_h_1) + (u_h_2'*u_h_2) ) / ( rows(u_h_1)+rows(u_h_2) )
+  chowout[i,] = chowteststat( rows_uhat1[i], rows_uhat2[i], rows(uhat), cov_matr_rec, cov_matr1_rec[kk:kk+nelem(Y)-1,], cov_matr2_rec[kk:kk+nelem(Y)-1,], uhat, p, Y, X, rows(var_coeff))
+  k++
+  kk += nelem(Y)
+endloop
+##################################
+/*			BOOTSTRAP			*/
+##################################
+matrix p_chow_ss = zeros(iterat, 1)
+matrix p_chow_bp = zeros(iterat, 1)
+matrix p_chow_fc = zeros(iterat, 1)
+#save teststatistics for each date tested and every bootstrap replication
+matrix median_ssstat = zeros(iterat, rep)
+matrix median_bpstat = zeros(iterat, rep)
+matrix median_fcstat = zeros(iterat, rep)
+matrix u = uhat .- meanc(uhat)	#centred residuals of full sample estimation
+if rows(xfull) != 0
+  scalar tmpd = rows(xfull) - rows(u)
+  matrix x = xfull[tmpd+1:,]
+  if rows(u) != rows(x)
+    printf &quot;ERROR IN BOOTSTRAP PROCEDURE\n&quot;
+    printf &quot;Number of observations between residuals and exogenous differs.\n&quot;
+  endif
+  matrix CONST = var_coeff[1,]
+  # Coefficient matrix of all deterministics and exogenous
+  matrix BETAX = var_coeff[nelem(Y)*p+2:,]
+  matrix U = uhat .+ CONST + x*BETAX
+else
+  matrix CONST = var_coeff[1,]
+  matrix U = uhat .+ CONST
+endif
+# Extended sample to allow the simulated data to burn in...
+matrix Uext = U | U | U | U
+#START BIG bootstrap loop
+loop jj = 1..rep --quiet
+  smpl @first @last
+  matrix Us = resample(Uext)
+  # Compute bootstrap time series from full sample
+  y0 = y0		#PREFFERED: start at historical data; already defined at the beginning of the code
+  #y0 = zeros(p,nelem(Y))								#Alternative: Results less in line with JMULTI
+  matrix S = varsimul(var_comp[1:nelem(Y),], Us, y0)
+  list Yb = null
+  scalar jump = rows(S) - Tfull
+  loop i=1..cols(S) -q
+    genr series y$i = S[jump+1:,i]	#S: T x nelem(Y) where T refers to the FULL SAMPLE length of the data set
+    Yb += y$i
+  endloop
+  # Full sample estimation -- bootstrap
+  smpl @first @last
+  var p Yb ; X @Ro --silent
+  matrix var_coeff = $coeff
+  matrix var_comp = $compan
+  matrix uhat = $uhat
+  # 1st subsample estimation -- bootstrap
+  # Matrices storing results for further calculations
+  smpl @start_sub1 @end_sub1
+  matrix rows_uhat1 = zeros(1, iterat)
+  matrix cov_matr1_rec = zeros(nelem(Y)*iterat, nelem(Y))
+  matrix n1_rec = zeros(1,iterat)	 # store scalar n1, needed for cov_matr calculation
+  matrix n2_rec = zeros(1,iterat)	#store scalar n2, needed for cov_matr calculation
+  scalar k = 1
+  scalar kk = 1
+  smpl @first @start_sub1
+  loop i=obsnum(start_sub1)..obsnum(end_sub1) --quiet
+    matrix y = { Y }
+    matrix x = { X }
+    scalar t1 = rows(y) - p		# number of obs of 1st subsample
+    scalar t2 = Teffective - t1
+    if t1 &lt; 1
+      n1=round(Teffective*t1)
+      tau1=t1
+    else
+      n1=t1
+      tau1=t1/Teffective
+    endif
+    if t2 &lt; 1
+      n2=round(Teffective*t2)
+      tau2=t2
+    else
+      n2=t2
+      tau2=t2/Teffective
+    endif
+    if n1&lt;=cols(y)		#CHECK: also parameters of exogenous are estimated
+      print &quot;ERROR: Starting Sample is smaller than Number of Parameters&quot;
+      print &quot;You need to select a larger value for t1&quot;
+    endif
+    if n2&gt;=Teffective- cols(y)#+cols(xfull) )	#CHECK: also parameters of exogenous are estimated
+      print &quot;ERROR: Ending Sample is smaller than Number of Paramters&quot;
+      print &quot;You need to select a smaller value for t2&quot;
+    endif
+    n1_rec[k] = n1
+    n2_rec[k] = n2
+    #var p Yb ; X @D @Ro --silent
+    var p Yb ; X @Ro --silent
+    matrix uhat1 = $uhat
+    rows_uhat1[k] = rows(uhat1)
+    cov_matr1_rec[kk:kk+nelem(Y)-1,] = uhat1'*uhat1
+    k++
+    kk=kk+nelem(Y)
+    smpl ; +1
+  endloop
+  /*	2nd subsample estimation -- bootstrap	*/
+  #Matrices storing results for further calculations
+  smpl @start_sub2 @end_sub2
+  matrix rows_uhat2 = zeros(1,iterat)							#store rows of uhat2
+  matrix cov_matr2_rec = zeros(nelem(Y)*(iterat),nelem(Y))	#store vcv2
+  /*		#recursive sample extension (2nd subsample)		*/
+  scalar k = 1	#counter
+  scalar kk = 1	#counter
+  smpl @start_sub2 @last
+  loop i=obsnum(start_sub2)..obsnum(end_sub2) --quiet
+    matrix y = { Y }
+    matrix x = { X }
+    scalar t2 = rows(y)
+    if t1 &lt; 1
+      n1=round(Teffective*t1)
+      tau1=t1
+    else
+      n1=t1
+      tau1=t1/Teffective
+    endif
+    if t2 &lt; 1
+      n2=round(Teffective*t2)
+      tau2=t2
+    else
+      n2=t2
+      tau2=t2/Teffective
+    endif
+    errorif(n1 &lt;= cols(y), &quot;Starting sample is smaller than number of parameters. You need to select a larger value for 't1'&quot;)
+    threshold = Teffective - ( cols(y)+cols(x) )
+    errorif(n2 &gt;= threshold, &quot;Ending sample is smaller than number of paramters. You need to select a smaller value for 't2'.&quot;)
+    var p Yb ; X @Ro --silent
+    matrix uhat2 = $uhat
+    rows_uhat2[k] = rows(uhat2)
+    cov_matr2_rec[kk:kk+nelem(Y)-1,] = uhat2' * uhat2
+    k++
+    kk += nelem(Y)
+    smpl +1 ;
+  endloop
+  scalar iterat = rows(cov_matr1_rec)/nelem(Y)
+  chowout_boot = zeros(iterat, 7)
+  cnameset(chowout_boot, &quot;tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2&quot;)
+  scalar k = 1
+  scalar kk = 1
+  loop i =1..iterat --quiet
+    n1tmp = n1_rec[k]
+    n2tmp = n2_rec[k]
+    matrix u_h_1 = uhat[1:n1tmp,]
+    scalar st = rows(uhat)-n2tmp+1
+    matrix u_h_2 = uhat[st:rows(uhat),]
+    matrix cov_matr_rec = ( (u_h_1'*u_h_1) + (u_h_2'*u_h_2) ) / ( rows(u_h_1)+rows(u_h_2) )
+    chowout_boot[i,] = chowteststat( rows_uhat1[i], rows_uhat2[i], rows(uhat), cov_matr_rec, cov_matr1_rec[kk:kk+nelem(Y)-1,], cov_matr2_rec[kk:kk+nelem(Y)-1,], uhat, p, Y, X, rows(var_coeff) )
+    k++
+    kk += nelem(Y)
+  endloop
+  p_chow_ss += chowout_boot[,1] .&gt; chowout[,1]
+  p_chow_bp += chowout_boot[,3] .&gt; chowout[,3]
+  p_chow_fc += chowout_boot[,5] .&gt; chowout[,5]
+  median_ssstat[,jj] = chowout_boot[,1]
+  median_bpstat[,jj] = chowout_boot[,3]
+  median_fcstat[,jj] = chowout_boot[,5]
+endloop		#END BIG bootstrap loop
+# Calculate bootstrap p-values
+p_chow_ss = p_chow_ss/rep
+p_chow_bp = p_chow_bp/rep
+p_chow_fc = p_chow_fc/rep
+# Calculate median test statistics
+med_ssstat = meanr(median_ssstat)
+med_bpstat = meanr(median_bpstat)
+med_fcstat = meanr(median_fcstat)
+cnameset(chowout, &quot;tstat_ss df_ss tstat_bp df_bp tstat_fc df_fc1 df_fc2&quot;)
+printf &quot;\n&quot;
+printf &quot;***************************************************************************\n&quot;
+printf &quot;CHOW TEST FOR STRUCTURAL BREAK\n&quot;
+printf &quot;On the reliability of Chow-type tests...\n&quot;
+printf &quot;B. Candelon, H. Luetkepohl, Economic Letters 73 (2001), 155-160\n&quot;
+printf &quot;\n&quot;
+printf &quot;Effective sample size:		T = %d\n&quot;, rows(uhat)
+printf &quot;Observations before break:	  = %d\n&quot;, n1
+if nelem(X)!=0
+  printf &quot;Chow test for VAR(%d) for %s and %s\n&quot;, p, varname(Y), varname(X)
+else
+  printf &quot;Chow test for VAR(%d) for %s\n&quot;, p, varname(Y)
+endif
+printf &quot;==========================================================================\n&quot;
+if breakd == &quot;every&quot;
+  printf &quot;Break date  chow_bp	  pv(boot)	pv(Chi^2)	df		chow_ss		pv(boot)	pv(Chi^2)	df		chow_fc		pv(boot)	pv(F)	df1	df2\n&quot;
+  printf &quot;----------------------------------------------------------------------------------------------------------------------------------------------------\n&quot;
+  scalar k = 0
+  loop i=1..iterat --quiet
+    string breakdate = obslabel(start + k)
+    printf &quot;@breakdate	%12.3f %12.3f %12.3f		[%d]	%12.3f	%12.3f	%12.3f		[%d]	%12.3f	%12.3f	%12.3f	[%d]	[%d]\n&quot;, chowout[i,3], p_chow_bp[i], pvalue(X,chowout[i,4],chowout[i,3]), chowout[i,4], chowout[i,1], p_chow_ss[i], pvalue(X,chowout[i,2],chowout[i,1]), chowout[i,2], chowout[i,5], p_chow_fc[i], pvalue(F,chowout[i,6], chowout[i,7], chowout[i,5]), chowout[i,6], chowout[i,7]
+    k++
+  endloop
+else
+  printf &quot;Breakpoint  Test   Distr.   Teststat   [df]	pv-asymp	pv-boot\n&quot;
+  printf &quot;--------------------------------------------------------------------------\n&quot;
+  printf &quot;@breakd	  chowSS   Chi^2	  %7.3f	[%d]	%.3f		%.4f\n&quot;, chowout[1], chowout[2], pvalue(X,chowout[2], chowout[1]), p_chow_ss
+  printf &quot;  	  chowBP   Chi^2	  %7.3f	[%d]	%.3f		%.4f\n&quot;, chowout[3], chowout[4], pvalue(X,chowout[4], chowout[3]), p_chow_bp
+  printf &quot;	  chowFC   F	  %7.3f [%d,%d]	%.3f		%.4f\n&quot;, chowout[5], chowout[6], chowout[7], pvalue(F, chowout[6], chowout[7], chowout[5]), p_chow_fc
+endif
+printf &quot;====================================================================================================================================================\n&quot;
+printf &quot;Note: Bootstrap p-values based on %d replications;\n     Sample period: @first--@last\n&quot;, rep
+printf &quot;\n&quot;
+printf &quot;Important info: chowSS-test assumes a constant white noise VCV and chowBP tests\n     against a changing VCV in addition. Also, volatility clusters in one of\n     the subsamples may cause problematic inference. TEST FOR remaining \n     ARCH-effects in the VAR before!\n&quot;
+printf &quot;******************************************************************************************************************************************************\n&quot;
+if breakd == &quot;every&quot;
+  # Plotting
+  string breakdate = obslabel(start+1)
+  string breakend = obslabel(start+rows(chowout))
+  smpl @breakdate @breakend
+  nob = $nobs
+  series ten = 0.10
+  series five = 0.05
+  series boot_chow_bp = p_chow_bp[,1]
+  series boot_chow_ss = p_chow_ss[,1]
+  series boot_chow_fc = p_chow_fc[,1]
+  replicat = sprintf(&quot;%d&quot;, rep)
+  if plotname == &quot;display&quot;
+    string plotopt = &quot;set term png enh ; set yrange [0:1.1]; set style line 1 lw 5 ; set style line 2 lw 3 ; set style line 3 lw 3;              set key outside below&quot;
+    gnuplot boot_chow_bp ten five --time-series --with-lines --with-impulses=boot_chow_bp --output=display --single-yaxis { set title 'break point Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+    gnuplot boot_chow_ss ten five --time-series --with-lines --with-impulses=boot_chow_ss --output=display --single-yaxis { set title 'sample-split Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+    gnuplot boot_chow_fc ten five --time-series --with-lines --with-impulses=boot_chow_fc --output=display --single-yaxis { set title 'Chow forecast test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+  else
+    string plotopt = &quot;set terminal pdf monochrome dashed font 'Helvetica,10'; set yrange [0:1.1];              set style line 1 lw 5 ; set style line 2 lw 3 ; set style line 3 lw 3;              set key outside below&quot;
+    gnuplot boot_chow_bp ten five --time-series --with-lines --with-impulses=boot_chow_bp --output=@plotname_bp.pdf --single-yaxis { set title 'break point Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+    gnuplot boot_chow_ss ten five --time-series --with-lines --with-impulses=boot_chow_ss --output=@plotname_ss.pdf --single-yaxis { set title 'sample-split Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+    gnuplot boot_chow_fc ten five --time-series --with-lines --with-impulses=boot_chow_fc --output=@plotname_fc.pdf --single-yaxis { set title 'Chow forecast test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+  endif
+endif
+matrix chowoutput = zeros(rows(chowout),13)
+matrix chowoutput[,1] = chowout[,1]
+matrix chowoutput[,2] = med_ssstat	#chowout_boot[,1]
+matrix chowoutput[,3] = chowout[,2]
+matrix chowoutput[,4] = p_chow_ss[,1]
+matrix chowoutput[,5] = chowout[,3]
+matrix chowoutput[,6] = med_bpstat	#chowout_boot[,3]
+matrix chowoutput[,7] = chowout[,4]
+matrix chowoutput[,8] = p_chow_bp[,1]
+matrix chowoutput[,9] = chowout[,5]
+matrix chowoutput[,10] = med_fcstat	#chowout_boot[,5]
+matrix chowoutput[,11] = chowout[,6]
+matrix chowoutput[,12] = chowout[,7]
+matrix chowoutput[,13] = p_chow_fc[,1]
+cnameset(chowoutput, &quot;tstat_ss tstatb_ss df_ss pvboot_ss tstat_bp tstatb_bp df_bp pvboot_bp tstat_fc tstatb_fc df_fc1 df_fc2 pvboot_fc&quot;)
+return chowoutput
+</code>
+</gretl-function>
+<gretl-function name="chowteststat" type="matrix" private="1">
+ <params count="11">
+  <param name="T1" type="int">
+<description>Sample size before break</description>
+  </param>
+  <param name="T2" type="int">
+<description>Sample size after break</description>
+  </param>
+  <param name="T" type="int"/>
+  <param name="cov_matr" type="matrix">
+<description>VCV full sample</description>
+  </param>
+  <param name="cov_matr1" type="matrix">
+<description>VCV 1st sample</description>
+  </param>
+  <param name="cov_matr2" type="matrix">
+<description>VCV 2nd sample</description>
+  </param>
+  <param name="uhat" type="matrix">
+<description>Residuals full sample</description>
+  </param>
+  <param name="p" type="int">
+<description>Lag length of VAR</description>
+  </param>
+  <param name="Y" type="list">
+<description>List of endogenous</description>
+  </param>
+  <param name="X" type="list">
+<description>List of Exogenous</description>
+  </param>
+  <param name="var_coeff" type="int"/>
+ </params>
+<code>/*	This function calculates the test statistics and degrees of freedom	*/
+matrix chowout = zeros(1, 7)
+# Sample-split version test stat
+chow_ss = (T1+T2) * ( ln(det(cov_matr)) - ln(det( (cov_matr1+cov_matr2)/(T1+T2) )) )
+# Break-point version test stat
+chow_bp = (T1+T2) * ln(det(cov_matr)) - T1*ln(det(cov_matr1/T1)) - T2*ln(det(cov_matr2/T2))
+# Calculation of degrees of freedom
+exonum = var_coeff - nelem(Y) * p
+k_ss = p * nelem(Y)^2 + nelem(Y) * exonum	#account for the linear trend
+k_bp = k_ss + nelem(Y)*(nelem(Y)+1) / 2
+# Forecast-version
+kstar = T - T1				# no. of forecast periods
+scalar k1 = var_coeff
+scalar K = nelem(Y)         #???+ nelem(X)
+q = K * kstar / 2 - 1
+N = T - k1 - kstar - (K - kstar + 1) / 2
+s = sqrt( ( (K*kstar)^2-4 ) / (K^2 + kstar^2 - 5) )
+# df when kstar is taken as T2
+R2 = (T1/T)^nelem(Y) * det(cov_matr1/T1) / det( uhat'*uhat/T )
+R2 = abs(R2)^(1/s)
+chow_fc = (1-R2) / R2*round(N*s-q) / (K*kstar)	# test statistic
+#chow_fc = ( (1-(1-R2)^(1/s)) / (1-R2)^(1/s) ) * round(N*s-q) / (K*kstar)
+k_fc1 = K*kstar
+k_fc2 = N*s-q
+chowout[1] = chow_ss
+chowout[2] = k_ss
+chowout[3] = chow_bp
+chowout[4] = k_bp
+chowout[5] = chow_fc
+chowout[6] = k_fc1
+chowout[7] = k_fc2
+strings clabels = defarray(&quot;tstat_ss&quot;, &quot;df_ss&quot;, &quot;tstat_bp&quot;, &quot;df_bp&quot;, &quot;tstat_fc&quot;, &quot;df_fc1&quot;, &quot;df_fc2&quot;)
+cnameset(chowout, clabels)
+return chowout
+</code>
+</gretl-function>
+<sample-script>
+clear
+set verbose off
+include var_chow.gfn
+
+# Example 1
+#------------
+open australia --quiet
+smpl 1972:4 1991:1
+list Y = IUS PUS e2
+list Y = diff(Y)
+list X = null
+scalar Rob = 1
+scalar p = 1
+scalar rep = 100
+string breakd = &quot;every&quot;
+sprintf plotname &quot;display&quot;
+
+test = var_chow(Y, X, Rob, p, breakd, rep, plotname)
+
+print test
+
+/* Actitave if needed
+# Example 2
+#------------
+list Y = IUS PUS e2
+list X = null
+scalar Rob = 1
+scalar p = 1
+scalar rep = 100
+string breakd = &quot;every&quot;
+sprintf plotname &quot;display&quot;
+# specify vecm
+scalar rnk = 1
+vecm 2 rnk Y
+series EC = $ec
+list Y2 = diff(Y)
+list X2 = EC(-1)
+test2 = var_chow(Y2,X2,Rob,p,breakd,rep,plotname)
+*/
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

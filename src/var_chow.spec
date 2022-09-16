@@ -8,3 +8,4 @@ min-version = 2022a
 public = var_chow
 help = var_chow_help.txt
 sample-script = var_chow_sample.inp
+data-requirement = needs-time-series-data
