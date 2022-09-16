@@ -619,7 +619,7 @@ scalar Rob = 1
 scalar p = 1
 scalar rep = 100
 string breakd = &quot;every&quot;
-sprintf plotname &quot;display&quot;
+string plotname = &quot;display&quot;
 
 test = var_chow(Y, X, Rob, p, breakd, rep, plotname)
 
