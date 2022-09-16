@@ -1,0 +1,10 @@
+author = Artur Tarassow
+email = atecon@posteo.de
+version = 1.0
+date = 2022-08-04
+description = Chow-test on parameter constancy for VAR models
+tags =
+min-version = 2022a
+public =
+help = var_chow_help.txt
+sample-script = var_chow_sample.inp

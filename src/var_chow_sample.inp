@@ -1,0 +1,39 @@
+clear
+set verbose off
+#include var_chow.gfn
+
+# Example 1
+#------------
+open australia --quiet
+smpl 1972:4 1991:1
+list Y = IUS PUS e2
+list Y = diff(Y)
+list X = null
+scalar Rob = 1
+scalar p = 1
+scalar rep = 100
+string breakd = "every"
+sprintf plotname "display"
+
+test = var_chow(Y, X, Rob, p, breakd, rep, plotname)
+
+print test
+
+/* Actitave if needed
+# Example 2
+#------------
+list Y = IUS PUS e2
+list X = null
+scalar Rob = 1
+scalar p = 1
+scalar rep = 100
+string breakd = "every"
+sprintf plotname "display"
+# specify vecm
+scalar rnk = 1
+vecm 2 rnk Y
+series EC = $ec
+list Y2 = diff(Y)
+list X2 = EC(-1)
+test2 = var_chow(Y2,X2,Rob,p,breakd,rep,plotname)
+*/
