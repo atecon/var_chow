@@ -29,7 +29,7 @@ Arguments:
           S.E., "3" to HAC S.E.
   p:      int, Select max. lag length of the VAR(p) model.
   breakd: string, Select (i) a specific break date to test (e.g. "1983:1")
-          or (ii) check every possible data point.
+          or (ii) check every possible data point ('every', default).
   rep:    int, Set the number of bootstrap iterations.
   plotname: string, 'display' returns immediate plot on screen; or define a
             path + filename where to save the output (e.g. plotname
@@ -54,6 +54,7 @@ Changelog:
   - Get rid of deprecated hansl syntax
   - Internal clean-up
   - Update help text
+  - Support for parameter 'breakd' only the option "every"
 0.82 (Oct. 2017)
   - Correct the 'boolean ==' issue
   - Some cleanup of the code and help file

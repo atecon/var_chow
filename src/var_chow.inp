@@ -62,17 +62,20 @@ function matrix var_chow (list Y "List of endogenous",
                           list X "List of exogenous",
                           int Rob[1:3:1] "Robust S.E." {"NO", "HC", "HAC"},
                           int p[1::4] "Lag length",
-                          string breakd "search over 'single' (e.g. '1983:1') or 'every' datapoint(s)",
+                          string breakd,
                           int rep[99::399] "bootstrap repl.",
                           string plotname "'display' or 'C:\irf.eps'")
     /* Public main function */
 
+    errorif(breakd != "every",\
+            "Currently only the option 'every' is supported.")
+
     matrix xfull = { X }
-    if Rob==1
+    if Rob == 1
         string Ro = ""
-    elif Rob==2
+    elif Rob == 2
         string Ro = "--robust"
-    elif Rob==3
+    elif Rob == 3
         string Ro = "--robust-hac"
     endif
 
@@ -89,14 +92,6 @@ function matrix var_chow (list Y "List of endogenous",
     scalar Tdiff = Tfull - Teffective
     printf "Sample size corrected for lags and taking differences of variables: %d\n", Teffective
     printf "Difference between selected sample size and effective sample size: %d\n", Tdiff
-
-    /*
-    if breakd=="every"
-        #scalar trim = 0.15					#Trimming factor
-        trimobs = round(Teffective*trim)	#number of period to cut-off at the beginning and end
-        printf "Number of obs. cut-off (%d%% trimming): %d\n", trim*100, trimobs
-    endif
-    */
 
     smpl +Tdiff ;
     matrix y = { Y }
@@ -127,19 +122,12 @@ function matrix var_chow (list Y "List of endogenous",
         # number of period to cut-off at the beginning and end
         trimobs = round(Teffective * trim)
 
-        if breakd == "every"
-            smpl @first @last
-            # Calculate trimmed sample size (starting /ending)
-            start =  $t1 + Tdiff + trimobs
-            string start_sub1 = obslabel(start - 1)
-            ende = $t2 - trimobs - Tdiff
-            string end_sub1 = obslabel(ende - 1)
-        else
-            scalar start = obsnum(@breakd)
-            string start_sub1 = obslabel(start - 1)
-            scalar ende = obsnum(@breakd)
-            string end_sub1 = obslabel(ende - 1)
-        endif
+        smpl @first @last
+        # Calculate trimmed sample size (starting /ending)
+        start =  $t1 + Tdiff + trimobs
+        string start_sub1 = obslabel(start - 1)
+        ende = $t2 - trimobs - Tdiff
+        string end_sub1 = obslabel(ende - 1)
 
         # Check whether starting sample is smaller than number of parameters
         smpl @first @start_sub1
@@ -209,18 +197,11 @@ function matrix var_chow (list Y "List of endogenous",
 
     # 2nd subsample estimation: starts at breakpoint+lag+Td
     smpl @first @last
-    if breakd=="every"
-        scalar start =  $t1 + Tdiff + trimobs
-        string start_sub2 = obslabel(start)
-        scalar ende = $t2 - Tdiff - trimobs
-        string end_sub2 = obslabel(ende)
-        printf "Second (non-effective) recursive subsample ranges from %s--%s to %s--%s\n", start_sub2, last, end_sub2, last
-    else
-        scalar start = obsnum(@breakd)
-        string start_sub2 = obslabel(start + p)
-        scalar ende = obsnum(@breakd)
-        string end_sub2 = obslabel(ende + p)
-    endif
+    scalar start =  $t1 + Tdiff + trimobs
+    string start_sub2 = obslabel(start)
+    scalar ende = $t2 - Tdiff - trimobs
+    string end_sub2 = obslabel(ende)
+    printf "Second (non-effective) recursive subsample ranges from %s--%s to %s--%s\n", start_sub2, last, end_sub2, last
 
     # Matrices storing results for further calculations
     smpl @start_sub2 @end_sub2
@@ -514,22 +495,14 @@ function matrix var_chow (list Y "List of endogenous",
     endif
 
     printf "==========================================================================\n"
-    if breakd == "every"
-        printf "Break date  chow_bp	  pv(boot)	pv(Chi^2)	df		chow_ss		pv(boot)	pv(Chi^2)	df		chow_fc		pv(boot)	pv(F)	df1	df2\n"
-        printf "----------------------------------------------------------------------------------------------------------------------------------------------------\n"
-        scalar k = 0
-        loop i=1..iterat --quiet
-            string breakdate = obslabel(start + k)
-            printf "@breakdate	%12.3f %12.3f %12.3f		[%d]	%12.3f	%12.3f	%12.3f		[%d]	%12.3f	%12.3f	%12.3f	[%d]	[%d]\n", chowout[i,3], p_chow_bp[i], pvalue(X,chowout[i,4],chowout[i,3]), chowout[i,4], chowout[i,1], p_chow_ss[i], pvalue(X,chowout[i,2],chowout[i,1]), chowout[i,2], chowout[i,5], p_chow_fc[i], pvalue(F,chowout[i,6], chowout[i,7], chowout[i,5]), chowout[i,6], chowout[i,7]
-            k++
-        endloop
-    else
-        printf "Breakpoint  Test   Distr.   Teststat   [df]	pv-asymp	pv-boot\n"
-        printf "--------------------------------------------------------------------------\n"
-        printf "@breakd	  chowSS   Chi^2	  %7.3f	[%d]	%.3f		%.4f\n", chowout[1], chowout[2], pvalue(X,chowout[2], chowout[1]), p_chow_ss
-        printf "  	  chowBP   Chi^2	  %7.3f	[%d]	%.3f		%.4f\n", chowout[3], chowout[4], pvalue(X,chowout[4], chowout[3]), p_chow_bp
-        printf "	  chowFC   F	  %7.3f [%d,%d]	%.3f		%.4f\n", chowout[5], chowout[6], chowout[7], pvalue(F, chowout[6], chowout[7], chowout[5]), p_chow_fc
-    endif
+    printf "Break date  chow_bp	  pv(boot)	pv(Chi^2)	df		chow_ss		pv(boot)	pv(Chi^2)	df		chow_fc		pv(boot)	pv(F)	df1	df2\n"
+    printf "----------------------------------------------------------------------------------------------------------------------------------------------------\n"
+    scalar k = 0
+    loop i=1..iterat --quiet
+        string breakdate = obslabel(start + k)
+        printf "@breakdate	%12.3f %12.3f %12.3f		[%d]	%12.3f	%12.3f	%12.3f		[%d]	%12.3f	%12.3f	%12.3f	[%d]	[%d]\n", chowout[i,3], p_chow_bp[i], pvalue(X,chowout[i,4],chowout[i,3]), chowout[i,4], chowout[i,1], p_chow_ss[i], pvalue(X,chowout[i,2],chowout[i,1]), chowout[i,2], chowout[i,5], p_chow_fc[i], pvalue(F,chowout[i,6], chowout[i,7], chowout[i,5]), chowout[i,6], chowout[i,7]
+        k++
+    endloop
 
     printf "====================================================================================================================================================\n"
     printf "Note: Bootstrap p-values based on %d replications;\n     Sample period: @first--@last\n", rep
@@ -537,30 +510,23 @@ function matrix var_chow (list Y "List of endogenous",
     printf "Important info: chowSS-test assumes a constant white noise VCV and chowBP tests\n     against a changing VCV in addition. Also, volatility clusters in one of\n     the subsamples may cause problematic inference. TEST FOR remaining \n     ARCH-effects in the VAR before!\n"
     printf "******************************************************************************************************************************************************\n"
 
-    if breakd == "every"
-        # Plotting
-        string breakdate = obslabel(start+1)
-        string breakend = obslabel(start+rows(chowout))
-        smpl @breakdate @breakend
-        nob = $nobs
-        series ten = 0.10
-        series five = 0.05
-        series boot_chow_bp = p_chow_bp[,1]
-        series boot_chow_ss = p_chow_ss[,1]
-        series boot_chow_fc = p_chow_fc[,1]
-        replicat = sprintf("%d", rep)
+    # Plotting
+    string breakdate = obslabel(start+1)
+    string breakend = obslabel(start+rows(chowout))
+    smpl @breakdate @breakend
+    nob = $nobs
+    series ten = 0.10
+    series five = 0.05
+    series boot_chow_bp = p_chow_bp[,1]
+    series boot_chow_ss = p_chow_ss[,1]
+    series boot_chow_fc = p_chow_fc[,1]
+    replicat = sprintf("%d", rep)
 
-        if plotname == "display"
-            string plotopt = "set term png enh ; set yrange [0:1.1]; set style line 1 lw 5 ; set style line 2 lw 3 ; set style line 3 lw 3;              set key outside below"
-            gnuplot boot_chow_bp ten five --time-series --with-lines --with-impulses=boot_chow_bp --output=display --single-yaxis { set title 'break point Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-            gnuplot boot_chow_ss ten five --time-series --with-lines --with-impulses=boot_chow_ss --output=display --single-yaxis { set title 'sample-split Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-            gnuplot boot_chow_fc ten five --time-series --with-lines --with-impulses=boot_chow_fc --output=display --single-yaxis { set title 'Chow forecast test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-        else
-            string plotopt = "set terminal pdf monochrome dashed font 'Helvetica,10'; set yrange [0:1.1];              set style line 1 lw 5 ; set style line 2 lw 3 ; set style line 3 lw 3;              set key outside below"
-            gnuplot boot_chow_bp ten five --time-series --with-lines --with-impulses=boot_chow_bp --output=@plotname_bp.pdf --single-yaxis { set title 'break point Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-            gnuplot boot_chow_ss ten five --time-series --with-lines --with-impulses=boot_chow_ss --output=@plotname_ss.pdf --single-yaxis { set title 'sample-split Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-            gnuplot boot_chow_fc ten five --time-series --with-lines --with-impulses=boot_chow_fc --output=@plotname_fc.pdf --single-yaxis { set title 'Chow forecast test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
-        endif
+    if plotname == "display"
+        string plotopt = "set term png enh ; set yrange [0:1.1]; set style line 1 lw 5 ; set style line 2 lw 3 ; set style line 3 lw 3;              set key outside below"
+        gnuplot boot_chow_bp ten five --time-series --with-lines --with-impulses=boot_chow_bp --output=display --single-yaxis { set title 'break point Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+        gnuplot boot_chow_ss ten five --time-series --with-lines --with-impulses=boot_chow_ss --output=display --single-yaxis { set title 'sample-split Chow test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
+        gnuplot boot_chow_fc ten five --time-series --with-lines --with-impulses=boot_chow_fc --output=display --single-yaxis { set title 'Chow forecast test: bootstrapped pvalue (@replicat repl.)'; @plotopt ; }
     endif
 
     matrix chowoutput = zeros(rows(chowout),13)
