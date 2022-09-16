@@ -3,7 +3,7 @@ PKG = var_chow
 $(PKG).gfn: $(PKG).inp $(PKG).spec $(PKG)_sample.inp
 	gretlcli --makepkg $(PKG).inp
 
-$(PKG).zip: $(PKG).gfn ./docs/$(PKG).pdf
+$(PKG).zip: $(PKG).gfn
 	echo makepkg $(PKG).zip | gretlcli -b -
 
 install: $(PKG).zip
